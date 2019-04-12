@@ -1,0 +1,14 @@
+---
+title: "chapter_three_assignment"
+author: "Veronica Thompson"
+date: "April 12, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Chapter 3    
+#### April 19 2019
+
