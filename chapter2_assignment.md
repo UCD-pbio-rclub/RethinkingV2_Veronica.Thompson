@@ -7,8 +7,8 @@ output:
     keep_md: yes
 ---
 
-###Chapter 2 
-####April 12 2019
+###Chapter 2    
+####April 12 2019  
 
 **2E1**   
 Which expressions coorelate to the statement: *the probability of rain on Monday*  
