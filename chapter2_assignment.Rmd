@@ -8,7 +8,7 @@ output:
 ---
 
 ###Chapter 2 
-####2019_04_12
+####April 12 2019
 
 **2E1**   
 Which expressions coorelate to the statement: *the probability of rain on Monday*  
