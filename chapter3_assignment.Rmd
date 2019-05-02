@@ -7,8 +7,217 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
 ```
 
 ### Chapter 3    
 #### April 19 2019
+
+#### 3.1. Sampling from a grid-approximate posterior  
+```{r, 3.2}
+#calculate posterior for globe model
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prob_p <- rep( 1 , 1000 ) 
+prob_data <- dbinom( 6 , size=9 , prob=p_grid ) 
+posterior <- prob_data * prob_p 
+posterior <- posterior / sum(posterior)
+```
+
+```{r, 3.3}
+#sample the posterior
+samples <- sample(p_grid , prob=posterior , size=1e4 , replace=TRUE)
+```
+
+```{r, 3.4}
+#plot samples
+plot(samples)
+```
+
+```{r, 3.5}
+#frequency plot samples
+dens(samples)
+```
+
+#### 3.2. Sampling to summarize  
+##### 3.2.1 Intervals of defined boundaries  
+Q: what is the probability that there is less than 50% water on Earth  
+
+Using the model, *not good for more complex models*
+```{r}
+# add up posterior probability where p < 0.5 
+sum( posterior[ p_grid < 0.5 ] )
+```
+
+Using samples from the posterior probability distribution, *much better for complex models*
+```{r}
+# sum of samples / sample size
+sum( samples < 0.5 ) / 1e4 
+```
+
+Q: probability water is between .5 and .75 of Earth's surface
+```{r}
+#from sample of posterior
+sum( samples > 0.5 & samples < 0.75 ) / 1e4
+```
+
+#### 3.2.2 Intervals of defined mass (confidence interval)  
+report two parameter values that contain a specific mass of the probability between them  
+ex: 95% confidence intervals is two values between which 95% of the mass of probability falls  
+
+Q: Boundaries of lower 80% quantile
+```{r, 3.9}
+#p = 0 is lowest boundary
+quantile( samples , 0.8 )
+```
+
+Q: boundaries of middle 80%, *good as long as data is not assymmetrical*
+```{r, 3.10}
+quantile( samples , c( 0.1 , 0.9 ) )
+```
+
+Assymmetrical data
+```{r, 3.11}
+#highly skewed data (3 water, flat prior for earth example)
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- rep(1,1000) 
+likelihood <- dbinom( 3 , size=3 , prob=p_grid ) 
+posterior <- likelihood * prior 
+posterior <- posterior / sum(posterior) 
+samples <- sample( p_grid , size=1e4 , replace=TRUE , prob=posterior )
+```
+
+```{r}
+dens(samples)
+```
+
+
+```{r, 3.12}
+#calculate percentile interval, from rethinking package
+PI( samples , prob=0.5 )
+#misleading result given shape
+```
+
+Highest Posterior Density Interval (HPDI)  
+narrowest interval containing a probability mass  
+very representative of data  
+not much differrent from another central interval unless data is skewed, as above  
+sensitive to sample size
+
+Q: HDPI 50% interval
+```{r, 3.13}
+#HPDI from Rethinking package
+HPDI(samples, prob = 0.5)
+```
+
+#### 3.2.3 Point Estimates  
+_maximum a posteriori_ (MAP)
+```{r, 3.14}
+#from model
+p_grid[ which.max(posterior) ]
+```
+
+```{r, 3.15}
+#from samples
+chainmode( samples , adj=0.01 )
+```
+
+weighted loss for one value
+```{R, 3.17}
+sum( posterior*abs( 0.5 - p_grid ) )
+```
+
+weighted loss for all values
+```{r, 3.18}
+loss <- sapply( p_grid , function(d) sum( posterior*abs( d - p_grid ) ) )
+#then, minumum loss  
+p_grid[ which.min(loss) ]
+#same as the median
+median(samples)
+```
+
+Practice problems:  
+3E1-7  
+3M1-4  
+
+```{r, 3.27}
+#specific set of samples for this E problems
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- rep( 1 , 1000 ) 
+likelihood <- dbinom( 6 , size=9 , prob=p_grid ) 
+posterior <- likelihood * prior 
+posterior <- posterior / sum(posterior) 
+set.seed(100) 
+samples <- sample( p_grid , prob=posterior , size=1e4 , replace=TRUE )
+dens(samples)
+```
+
+**3E1.** How much posterior probability lies below p = 0.2?  
+```{r}
+sum( samples < 0.2 ) / 1e4 
+```
+
+**3E2.** How much posterior probability lies above p = 0.8? 
+```{r}
+sum(samples > 0.8) /1e4
+```
+
+**3E3.** How much posterior probability lies between p = 0.2 and p = 0.8? 
+```{r}
+sum(samples > 0.2 & samples < 0.8) /1e4
+```
+
+```{r}
+#sum of all to check
+5e-04+.1117+.8878
+```
+
+**3E4.** 20% of the posterior probability lies below which value of p?  
+```{r}
+quantile(samples, .2)
+```
+
+**3E5.** 20% of the posterior probability lies above which value of p? 
+```{r}
+quantile(samples, .8)
+```
+
+**3E6.** Which values of p contain the narrowest interval equal to 66% of the posterior probability?
+```{r}
+HPDI(samples, prob = .66 )
+```
+
+**3E7.** Which values of p contain 66% of the posterior probability, assuming equal posterior probability both below and above the interval?
+```{r}
+quantile(samples, c(.17, .83))
+```
+
+**3M1.** Suppose the globe tossing data had turned out to be 8 water in 15 tosses. Construct the posterior distribution, using grid approximation. Use the same flat prior as before.  
+```{r}
+p_grid = seq(from = 0, to = 1, length.out = 1000) #flat prior
+prior = rep(1, 1000)
+likelihood = dbinom(8, size = 15, prob = p_grid)
+posterior = likelihood * prior
+posterior = posterior / sum(posterior)
+plot (posterior)
+```
+
+**3M2.** Draw 10,000 samples from the grid approximation from above. Then use the samples to calculate the 90% HPDI for p.  
+
+```{r}
+samples = sample(p_grid, size = 1e4, replace = TRUE, prob = posterior)
+dens(samples)
+```
+
+```{r}
+HPDI(samples, prob = .90)
+```
+
+**3M3.** Construct a posterior predictive check for this model and data. This means simulate the distri- bution of samples, averaging over the posterior uncertainty in p. What is the probability ofobserving 8 water in 15 tosses?  
+```{r}
+predictions <- rbinom(10000, 9, prob = samples)
+sum(predictions==6) / length(predictions)
+```
+
+**3M4.** Using the posterior distribution constructed from the new (8/15) data, now calculate the prob- ability of observing 6 water in 9 tosses.  
 
