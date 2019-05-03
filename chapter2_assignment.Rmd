@@ -14,7 +14,7 @@ output:
 Which expressions coorelate to the statement: *the probability of rain on Monday*  
 (1) Pr(rain)  
 **(2) Pr(rain|Monday)**  
-**(3) Pr(Monday|rain)**  
+(3) Pr(Monday|rain)  < Think about if it ONLY rains on Monday, we observe rain, what is the change it is Monday?
 **(4) Pr(rain, Monday)/ Pr(Monday)** (Pr rain and Monday / Pr Monday?)  
 
 **2E2**   
@@ -51,6 +51,7 @@ unstd.posterior <- likelihood * prior
 
 # standardize the posterior, so it sums to 1 
 posterior <- unstd.posterior / sum(unstd.posterior)
+sum(posterior)
 
 plot( p_grid , posterior , type="b" , xlab="probability of water" , ylab="posterior probability" )
 mtext("W, W, W")
@@ -182,6 +183,9 @@ Pr(E|land) = 30/130 land is earth
 30/130
 ```
 
+*Julin used same set of code we used for the dirstributions*
+*Minyao thought like me but used real math*
+
 **2M4**   
 Suppose you have a deck with only three cards. Each card has two sides, and each side is either
 black or white. One card has two black sides. The second card has one black and one white side. The
@@ -223,3 +227,19 @@ side is black.
 4 paths have black face down  
 
 Pr(black down | black up) = 4/5
+
+**2M6**
+Imagine that black ink is heavy, and so cards with black sides are heavier than cards with white
+sides. As a result, it’s less likely that a card with black sides is pulled from the bag. So again assume
+there are three cards: B/B, B/W, and W/W. After experimenting a number of times, you conclude that
+for every way to pull the B/B card from the bag, there are 2 ways to pull the B/W card and 3 ways to
+pull the W/W card. Again suppose that a card is pulled and a black side appears face up. Show that
+the probability the other side is black is now 0.5. Use the counting method, as before.
+
+
+|card| prior  | paths  | possibilities   | prob |
+|----|---------|-----------|---------|
+| BB | 1 | 2 | 2 | 2/4 |
+| BW | 2 | 1 | 2 | 2/4 |
+| WW | 3 | 0 | 0 | 0 |
+

@@ -1,0 +1,305 @@
+---
+title: "chapter_4_assignment"
+author: "Veronica Thompson"
+date: "May 2, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+```
+
+### 4.1 Why normal distributions are normal
+
+```{r, 4.1}
+pos = replicate(1000, sum(runif(16, -1, 1)))
+plot(density(pos))
+```
+
+```{r, 4.3}
+growth <- replicate( 10000 , prod( 1 + runif(12,0,0.1) ) ) 
+dens(growth, norm.comp = TRUE)
+```
+
+```{r, 4.4}
+big <- replicate( 10000 , prod( 1 + runif(12,0,0.5) ) ) 
+small <- replicate( 10000 , prod( 1 + runif(12,0,0.01) ) )
+dens(big, norm.comp = T)
+dens(small, norm.comp = T) #small is more normal than big
+```
+
+```{r, 4.5}
+log.big <- replicate( 10000 , log(prod(1 + runif(12,0,0.5))) )
+dens(log.big, norm.comp = T)
+```
+
+
+### 4.3 A Gaussian model for height  
+
+requires:  
+* a single measurment variable  
+* two paaramenters to describe the distribution, mean and standard deviation
+* bayesian updating will help us score combinations of mean and standard deviation based on plausability based on data  
+* goal: the posterior distribution will be a distribution of distributions  
+(review this weirdness later)  
+
+load height data 
+```{r, 4.7}
+data("Howell1")
+d = Howell1
+str(d)
+```
+
+another way to preview data  
+```{r, 4.9}
+precis(d)
+```
+
+extract adults only and plot heights
+```{r, 4.11}
+d2 = d[d$age >= 18, ]
+dens(d2$height, norm.comp = T)
+```
+looks normally distributed!  
+  
+define heights of individuals as normally distributed with mean mu and standard dev, sigma  
+*h*~i~ ~ Normal(*mu*, *sigma*)  
+
+we will estimate paramters mu and sigma, so we must have prior Pr(mu, sigma) (joint prior)  
+most of the time we can assume Pr(mu, sigma) = Pr(mu) Pr(sigma), so...  
+
+*h*~i~ ~ Normal(*mu*, *sigma*)  [likelihood]  
+*mu* ~ Normal(178, 20) [mu prior, based on author's height +- 40cm]  
+*sigma* ~ Uniform(0,50) [sigma prior, flat prior, 95% of heights will be withing 100cm of mu]  
+
+plot the prior
+```{r, 4.12}
+curve( dnorm( x , 178 , 20 ) , from=100 , to=250 )
+```
+
+```{r, 4.13}
+curve( dunif( x , 0 , 50 ) , from=-10 , to=60 )
+```
+
+Next up, make a prior predictive simulation to show what your priors imply about height. This helps Id bad choices  
+
+Simulate heights by sampling from the prior (just like posterior sampling in Chap 3)  
+```{r, 4.14}
+sample_mu = rnorm(1e4, mean = 178, sd = 20)
+sample_sigma = runif(1e4, min = 0, max = 50)
+prior_h = rnorm(1e4, sample_mu, sample_sigma)
+dens(prior_h, norm.comp = T)
+```
+
+test to see a more flat prior mu  
+```{r, 4.15}
+sample_mu = rnorm(1e4, mean = 178, sd = 100)
+prior_h = rnorm(1e4, sample_mu, sample_sigma)
+dens(prior_h, norm.comp = T)
+```
+This is less useful beacsue it is not realistic. Some people will have negative height and more will be giants than we have observed in the human population  
+
+As an example, here is the full algorithm for the posterior distributuion. we will almost always use approximations because they cost less and are pretty accurate:  
+```{r, 4.16}
+mu.list <- seq( from=140, to=160 , length.out=200 ) 
+sigma.list <- seq( from=4 , to=9 , length.out=200 ) 
+post <- expand.grid( mu=mu.list , sigma=sigma.list ) 
+post$LL <- sapply( 1:nrow(post) , function(i) sum( dnorm( d2$height , mean=post$mu[i] , sd=post$sigma[i] , log=TRUE ) ) )
+post$prod <- post$LL + dnorm( post$mu , 178 , 20 , TRUE ) + dunif( post$sigma , 0 , 50 , TRUE )
+post$prob <- exp( post$prod - max(post$prod) )
+```
+
+visualize contour map  
+```{r, 4.17}
+contour_xyz( post$mu , post$sigma , post$prob )
+```
+
+visualize heat map  
+```{r, 4.18}
+image_xyz( post$mu , post$sigma , post$prob )
+```
+Based on priors we defined and height data mu is likely around 154-155 and sigma is around 7.5-8.1? 
+
+sampling the prior data  
+because there are two parameters now we sample rows in prior then pull out the mu and sigma values  
+```{r, 4.19}
+sample.rows <- sample( 1:nrow(post) , size=1e4 , replace=TRUE , prob=post$prob )
+sample.mu <- post$mu[ sample.rows ] 
+sample.sigma <- post$sigma[ sample.rows ]
+```
+
+visualize
+```{r, 4.20}
+plot( sample.mu , sample.sigma , cex=0.5 , pch=16 , col=col.alpha(rangi2,0.1) )
+```
+
+observe the distribution of each parameter
+```{r}
+HPDI(sample.mu)
+dens(sample.mu)
+```
+
+```{r}
+HPDI(sample.sigma)
+dens(sample.sigma)
+```  
+long tail to the right is common for sigma  
+
+next tool; quadratic approximation  
+From the top now, load data and filter for adults  
+```{r, 4.26}
+data("Howell1")
+d = Howell1
+d2 = d[d$age >=18, ]
+```
+
+define the model as before, using R syntax  
+*h*~i~ ~ Normal(*mu*, *sigma*)  [likelihood]  
+*mu* ~ Normal(178, 20) [mu prior, based on author's height +- 40cm]  
+*sigma* ~ Uniform(0,50) [sigma prior, flat prior, 95% of heights will be withing 100cm of mu]  
+```{r, 4.27}
+flist = alist(
+  height ~ dnorm(mu, sigma), 
+  mu ~ dnorm(178, 20), 
+  sigma ~ dunif(0, 50)
+)
+```
+
+fit the model to the data in d2  
+```{r, 4.28}
+m4.1 = quap(flist, data = d2)
+```
+
+check out the posterior dist using precis  
+```{r, 4.29}
+precis(m4.1)
+```
+
+the plausibility of each vlaue of mu after averaging over the palusibility of each value of sigma is given by a normal distribution with a mean of 154.61 and sd of .41. The 89% interval borders ate given  
+  
+a more narrow prior for mu will make sd of posterior of mu much smaller.  
+  
+sampling from a quap:  
+a quadratic approximation of a posterior distribution with more than one parameter is a multi-dimensional  
+gaussian distribution, so variance and covariance can help describe it  
+```{r, 4.32}
+vcov(m4.1)
+```
+
+or broken down...
+```{r, 4.33}
+diag( vcov( m4.1 ) ) 
+cov2cor( vcov( m4.1 ) )
+```
+
+1's in the matrix mean that each paramter is coorelated with itself. anything other than 1 is suspect  
+low values at sigma, mu and mu, sigma indicate there is little coorelation between the two parameters, therefore knowing mu will not help find sigma or vice-versa.  
+
+to complete sampling, smaple vectors using rethinking package instead of single values on a gaussian dist.  
+```{r, 4.34}
+post <- extract.samples( m4.1 , n=1e4 ) 
+head(post)
+```  
+
+### 4.4 adding a predictor  
+We will explore height v weight covariation  
+```{r, 4.37}
+plot( d2$height ~ d2$weight )
+```  
+There seems to be predictive value here!  
+
+lets make a linear model  
+we are asking “Consider all the lines that relate one variable to the other. Rank all of these lines by plausibility, given these data.”  
+  
+our basic gaussian model  
+*h*~i~ ~ Normal(*mu*, *sigma*)  [likelihood]  
+*mu* ~ Normal(178, 20) [mu prior]  
+*sigma* ~ Uniform(0,50) [sigma prior]
+
+include weight as a predictor, x = weight values, xbar = average weight  
+*h*~i~ ~ Normal(*mu*~i~, *sigma*) [likelihood]  
+*mu*~i~ = alpha + beta(x~i~ - xbar)  [linear model, relates weight to height]  
+*alpha* ~ Normal(178, 20) [alpha prior]  
+*beta* ~ Normal(0, 10) [beta prior]  
+*sigma* ~ Uniform(0, 50) [sigma prior]  
+
+Build the porsterior approximation:  
+```{r, 4.42}
+#load data one more time for good luck
+data("Howell1")
+d = Howell1
+d2 = d[d$age >= 18, ]
+
+#define average weight based on the data
+xbar <- mean(d2$weight)
+
+# fit the model 
+m4.3 = quap( 
+  alist(
+    height ~dnorm(mu, sigma),
+    mu <- a + b*(weight  - xbar), 
+    a ~ dnorm(178, 20), 
+    b ~ dlnorm(0, 1), 
+    sigma ~ dunif(0, 50)
+  ), 
+  data = d2 )
+```
+
+
+Practice problems
+**4E1.** In the model definition below, which line is the likelihood?  
+  **yi ∼ Normal(µ, σ)**  
+  µ ∼ Normal(0, 10)  
+  σ ∼ Uniform(0, 10)  
+  
+**4E2.** In the model definition just above, how many parameters are in the posterior distribution?  
+  two!  
+  
+**4E3.** Using the model definition above, write down the appropriate form of Bayes’ theorem that includes the proper likelihood and priors.  
+ugh....  
+  
+**4E4.** In the model definition below, which line is the linear model?  
+  yi ∼ Normal(µ, σ)  
+  **µi = α + βxi**  
+  α ∼ Normal(0, 10)  
+  β ∼ Normal(0, 1)  
+  σ ∼ Uniform(0, 10)   
+  
+**4E5.** In the model definition just above, how many parameters are in the posterior distribution?  
+ three!  
+ 
+**4M1.** For the model definition below, simulate observed heights from the prior (not the posterior).  
+  yi ∼ Normal(µ, σ)  
+  µ ∼ Normal(0, 10)  
+  σ ∼ Uniform(0, 10)  
+```{r, 4M1}
+sample_mu = rnorm(1e4, mean = 0, sd = 10)
+sample_sigma = runif(1e4, min = 0, max = 10)
+prior_height = rnorm(1e4, sample_mu, sample_sigma)
+dens(prior_height, norm.comp = T)
+```
+
+**4M2.** Translate the model just above into a quap formula.  
+```{r, 4M2}
+m = alist(
+  y ~ dnorm(mu, sigma),
+  mu ~ dnorm(0, 10), 
+  sigma ~ dunif(0, 10))
+```
+
+**4M3.** Translate the quap model formula below into a mathematical model definition.  
+```{r}
+flist <- alist( 
+  y ~ dnorm( mu , sigma ), 
+  mu <- a + b*x, 
+  a ~ dnorm( 0 , 50 ), 
+  b ~ dunif( 0 , 10 ), 
+  sigma ~ dunif( 0 , 50 ))
+```  
+yi ~ Normal(mui, sigma)  
+mui = a + b(xi)  
+a ~ Normal(0, 150)  
+b ~ Uniform(0, 10)  
+sigma ~ Uniform( 0, 50)
